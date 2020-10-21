@@ -1,6 +1,3 @@
-# evaluates the output of "generate_missed_received_lists" and saves to
-# database
-
 from collections import Counter
 import configparser
 import pandas as pd
@@ -14,18 +11,22 @@ uti.log("loading configs")
 configfilename = 'config.ini'
 config = configparser.ConfigParser()
 config.read(configfilename)
+start_ts = config["general"]["start-ts"]
+end_ts = config["general"]["end-ts"]
+prefixes = set(eval(config["general"]["prefixes"]))
 
+# minimum time delta between end of Burst and re-advertisement
+min_delta_readvertisment = int(config["general"]["min-delta-readvertisment"])
+
+# share of Bursts that have to match the update pattern for the whole path to
+# be RFD true
+minimum_pattern_match = 0.90
+
+# get timestamps for burst start based on crontab present in config
 burst_starts_temp = confu.get_burst_starts(config)
 burst_starts = pd.Series(burst_starts_temp, index=burst_starts_temp)
 burst_length = eval(config["general"]["burst-length"])
 break_length = burst_starts.iloc[1] - burst_starts.iloc[0] - burst_length
-
-min_delta_readvertisment = int(config["general"]["min-delta-readvertisment"])
-
-start_ts = config["general"]["start-ts"]
-end_ts = config["general"]["end-ts"]
-
-minimum_pattern_match = 0.90
 
 
 def get_burst_start(send_ts):
@@ -34,6 +35,8 @@ def get_burst_start(send_ts):
     return min(burst_starts, key=lambda start: abs(start - send_ts + 1))
 
 
+# load expected updates and get the respective burst start for each of the
+# expected updates
 expected_updates_list = exup.get_expected_updates('config.ini')
 expected_updates_df = pd.DataFrame(expected_updates_list,
                                    columns=["prefix", "send-ts", "upd-type"])
@@ -42,20 +45,26 @@ expected_updates_df = expected_updates_df[expected_updates_df["upd-type"] ==
 expected_updates_df["burst-start"] = expected_updates_df["send-ts"].apply(
     get_burst_start)
 
-prefixes = set(eval(config["general"]["prefixes"]))
-
+# find out how many updates are sent per Burst
 updates_per_burst = Counter(expected_updates_df[
     expected_updates_df["burst-start"] == burst_starts.iloc[0]]["prefix"])
 
 
 def _check_update_pattern_burst(mis_rec_df):
+    # this is where we actually check for the rfd signature pattern
+    # input is a DataFrame of updates for a path, prefix, burst+break
+
+    # get the prefix
     prefix = mis_rec_df["prefix"].tolist()[0]
+    # get burst start
     burst_start = mis_rec_df["burst-start"].tolist()[0]
+    # sanity check
     assert prefix in prefixes, "unknown prefix"
+    # validate that there are no duplicates
     assert list(mis_rec_df["send-ts"]) == list(
         mis_rec_df["send-ts"].drop_duplicates()), "duplicate send-ts"
 
-    # 1 Re-advertisment exists
+    # 1 check if re-advertisment exists
     last_sent_announcement = expected_updates_df[
         (expected_updates_df["burst-start"] == burst_start)
         & (expected_updates_df["prefix"] == prefix)]["send-ts"].max()
@@ -69,11 +78,11 @@ def _check_update_pattern_burst(mis_rec_df):
                           "actual_update_ts"]) - last_sent_announcement
 
     # readv needs to match upper bound and not be part of the next burst
-    if not(min_delta_readvertisment < read_delta < break_length):
+    if not (min_delta_readvertisment < read_delta < break_length):
         return False
-    assert(read_delta < break_length)
+    assert (read_delta < break_length)
 
-    # 3 At least one update missed
+    # 3 At least one update missed (this is more like a sanity condition)
     if len(mis_rec_df["send-ts"]) == updates_per_burst[prefix]:
         return False
 
@@ -82,20 +91,19 @@ def _check_update_pattern_burst(mis_rec_df):
 
 
 def detect_rfd_single_new(peer):
-    mis_rec_df = pd.DataFrame(
-        mrl.fast_read_mis_rec_lists(peer=peer,
-                                    config=config,
-                                    configfilename=configfilename),
-        columns=[
-            "prefix", "send-ts", "update_type", "peer", "update_found", "path",
-            "actual_update_ts"
-        ])
+
+    # load received updates for respective peer
+    mis_rec_df = pd.DataFrame(mrl.fast_read_mis_rec_lists(peer=peer),
+                              columns=[
+                                  "prefix", "send-ts", "update_type", "peer",
+                                  "update_found", "path", "actual_update_ts"
+                              ])
 
     # sometimes df can be empty
     if mis_rec_df.size == 0:
         return None
 
-    # compute missed/received ratio
+    # compute missed/received ratio (this is debug info)
     # count number of received updates for each path+prefix
     mis_rec_ratios = mis_rec_df.groupby(
         ["path", "prefix"])["send-ts"].count().reset_index(name="update-count")
@@ -130,6 +138,7 @@ def detect_rfd_single_new(peer):
         lambda match_list: sum([1 for match in match_list if match == True]
                                ) >= len(burst_starts) * minimum_pattern_match)
 
+    # more debugging information
     # shows how many bursts match pattern
     mis_rec_df["match-pattern"] = mis_rec_df["rfd-pattern-match"].apply(
         lambda match_list: sum([1 for match in match_list
