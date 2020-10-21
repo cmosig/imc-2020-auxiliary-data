@@ -5,12 +5,16 @@ route collectors.
 
 If you have questions don't hesitate to contact clemens.mosig@fu-berlin.de
 
-# Download of BGP update dumps
-
-Run the python download script from the respective project directory which is
+Run the python scripts from the respective project directory which is
 either `data/march` or `data/april`. Pass the configuration file as parameter.
 The configuration file contains all information of the experiment such as
 update interval or prefixes. 
+
+# Preparation 
+
+## Download of BGP update dumps
+
+Run:
 
     python3 ../../code/download_data.py config.ini
 
@@ -19,8 +23,6 @@ that you are required to download and install CAIDA's `bgpreader`, specifically
 our custom fork:
 
     https://github.com/cmosig/libbgpstream   
-
-# Preparation 
 
 ## Expected Updates
 
@@ -51,6 +53,36 @@ matches the announcements with the Beacon events (generated from expected
 updates file). Additionally, the matched updates are saved into a directory
 (`missed_received_data`) split by peer IP. 
 
+
 # Path Labeling
+
+Run the script:
+
+    python3 ../../code/label_paths.py config.ini
+
+This script labels paths with RFD True and False based on the RFD signature.
+
+# Pinpointing
+
+## BeCAUSe 
+
+Run: 
+
+    python3 ../../code/BeCAUSe/path_format_BeCAUSe.py
+    python3 ../../code/BeCAUSe/create_summaries.py
+
+
+## Heuristics 
+
+Run:
+
+    python3 ../../code/graph_from_as_paths.py config.ini
+
+This script creates an AS graph as seen from each vantage point. This
+information is required for metric 2 when using the heuristics for pinpointing.
+
+Then run the script:
+
+    python3 ../../code/heuristics_pinpointing.py
 
 
