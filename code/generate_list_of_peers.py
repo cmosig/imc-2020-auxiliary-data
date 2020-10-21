@@ -1,4 +1,4 @@
-#generates list of peers using input-file in config
+# generates list of peers using input-file in config
 
 from tqdm import tqdm
 import bgpana as bap
@@ -23,6 +23,7 @@ def get_list_of_peers(configfile):
     print(command)
     os.system(command)
 
+    # filter IPs based on syntax
     good_IPs = []
     with open(filename, 'r') as f:
         all_IPs = f.read().splitlines()

@@ -33,6 +33,13 @@ into a list of updates with timestamps, which note where we send updates from
 Beacons and thus expect them so see them at route collectors. The results of
 this script are automatically saved.
 
+## Create list of peers 
+
+Simply run:
+
+    python3 ../../code/generate_list_of_peers.py config.ini
+
+
 ## Match received updates with expected updates
 
 Run the script:
