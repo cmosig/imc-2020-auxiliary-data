@@ -6,52 +6,55 @@ import bgpana as bap
 import config_util as confu
 from datetime import timezone
 from datetime import datetime
-from functools import lru_cache
 import configparser
 import expected_updates as exup
 import pandas as pd
 import utilities as uti
 
+# serve expected updates from cache
 expected_updates_list = exup.get_expected_updates('config.ini')
+# cast into DataFrame
 expected_updates_df = pd.DataFrame(expected_updates_list,
                                    columns=["prefix", "send-ts", "upd-type"])
+# we are only analyzing announcements
 expected_updates_df = expected_updates_df[expected_updates_df["upd-type"] ==
                                           'A']
 
+# load config
 config = configparser.ConfigParser()
 config.read('config.ini')
-
 start_ts = int(config["general"]["start-ts"])
 end_ts = int(config["general"]["end-ts"])
-
 prefixes = eval(config["general"]["prefixes"])
 exp_cache = dict(
     zip(prefixes, [
         expected_updates_df[expected_updates_df["prefix"] == p]["send-ts"]
         for p in prefixes
     ]))
+output_dir = 'missed_and_received_data/'
 
 
-# @lru_cache(maxsize=30000)
+# finds the closest expected update for the aggregator IP in given received
+# update
+# Aggregator IPs are set by the Beacon router and contain the point in time
+# where updates are sent. Specifically the time is encoded as in:
+# https://www.ripe.net/analyse/internet-measurements/routing-information-service-ris/current-ris-routing-beacons
+# Sometimes the timestamp is not precise and off by up to two seconds.
+# Therefore, we can't match them directly, but have to find the closest
+# matching expected send timestamp.
 def round_send_ts(send_ts, prefix):
     return min(exp_cache[prefix], key=lambda x: abs(x - send_ts))
 
 
-def create_missed_and_received_single_new(peer,
-                                          peer_subdf,
-                                          output_dir,
-                                          cache=True):
+def match_updates(peer, peer_subdf, output_dir, cache=True):
     uti.log(f"starting to calculate for peer {peer}")
 
-    if output_dir is None:
-        output_dir = 'missed_and_received_data'
-
     # filename for peer mis_rec_file
-    filename = output_dir + '/fast/' + peer + '_' + str(start_ts) + '_' + str(
-        end_ts)
+    filename = output_dir + peer + '_' + str(start_ts) + '_' + str(end_ts)
 
     # use existing file
     if (cache and os.path.isfile(filename)):
+        # TODO
         return list(
             map(
                 lambda x: (x[0], int(x[1]), x[2], x[3], eval(x[4]), eval(x[5]),
@@ -62,6 +65,7 @@ def create_missed_and_received_single_new(peer,
     # only analyzing announcements
     peer_subdf = peer_subdf.copy()[peer_subdf["update"] == 'A']
 
+    # catch if peer did not send any announcements
     if peer_subdf.size == 0:
         return None
 
@@ -70,6 +74,7 @@ def create_missed_and_received_single_new(peer,
         lambda path: tuple(bap.clean_ASpath(path.split(' '))))
 
     # converting aggregator ips to actual timestamps
+    # (aggregator IPs contain the send timestamps)
     peer_subdf["send-ts"] = peer_subdf[["record-ts", "aggregator-ip"]].apply(
         lambda x: uti.aggregator_ip_to_ts(
             string=x["aggregator-ip"],
@@ -77,27 +82,18 @@ def create_missed_and_received_single_new(peer,
             year=datetime.fromtimestamp(x["record-ts"], timezone.utc).year),
         axis=1)
 
+    # catch if agg-IP conversion fails
     if 0 in peer_subdf["send-ts"]:
         uti.log(
             f"There have been errors when converting agg IP for peer {peer}")
-
-    # redo send-ts if record-ts > send-ts
-    # DO NOT REDO, because we limit our measurements to only one month
-    # peer_subdf["send-ts"] = peer_subdf[[
-    #     "record-ts", "aggregator-ip", "send-ts"
-    # ]].apply(lambda x: (uti.aggregator_ip_to_ts(
-    #     string=x["aggregator-ip"],
-    #     month=datetime.fromtimestamp(x["record-ts"], timezone.utc).month - 1,
-    #     year=datetime.fromtimestamp(x["record-ts"], timezone.utc).year)) if
-    #          (float(x["record-ts"]) < float(x["send-ts"])) else x["send-ts"],
-    #          axis=1)
 
     # remove any update for which the record-ts > send-ts
     # this can happen if we receive updates from a Burst outside of the
     # current measurement interval
     peer_subdf = peer_subdf[peer_subdf["send-ts"] <= peer_subdf["record-ts"]]
 
-    # round send-ts to nearest expected ts
+    # round send-ts to nearest expected ts (see explanation above at
+    # round_send_ts function)
     peer_subdf.loc[:, "send-ts"] = peer_subdf[["send-ts", "prefix"]].apply(
         lambda row: round_send_ts(row["send-ts"], row["prefix"]), axis=1)
 
@@ -106,15 +102,18 @@ def create_missed_and_received_single_new(peer,
         "send-ts", "as-path", "prefix"
     ])["record-ts"].apply(lambda x: sorted(list(x))).reset_index()
 
+    # TODO remove this line maybe
     peer_subdf["update-found"] = True
     peer_subdf["peer-IP"] = peer
     peer_subdf["update"] = 'A'
+    # put columns in correct order
     columns = [
         "prefix", "send-ts", "update", "peer-IP", "update-found", "as-path",
         "record-ts"
     ]
     peer_subdf = peer_subdf[columns]
 
+    # save file. one per vantage point
     peer_subdf.to_csv(filename, sep='|', header=None, index=False)
 
 
@@ -138,17 +137,16 @@ def generate_missed_received_list(cache=True):
     actual_updates_df = actual_updates_df.astype({"record-ts": int})
 
     # a file for each peer file be stored here
-    storage_missed_received = 'missed_and_received_data'
-    if (not os.path.exists(storage_missed_received)):
-        os.mkdir(storage_missed_received)
+    bap.prep_dir(output_dir)
 
     uti.log("computing lists now")
-    bap.paral(create_missed_and_received_single_new, [
+    # split by peer and match updates
+    bap.paral(match_updates, [
         peers,
         [
             actual_updates_df[actual_updates_df["peer-IP"] == peer]
             for peer in peers
-        ], [storage_missed_received] * len(peers), [False] * len(peers)
+        ], [False] * len(peers)
     ])
     uti.log("computing lists done")
 
@@ -157,10 +155,10 @@ def generate_missed_received_list(cache=True):
 file_cache = {}
 
 
-def fast_read_mis_rec_lists(config, peer, configfilename):
+def fast_read_mis_rec_lists(peer):
     # returns not the complete mis_received file, but only lines with rfd=True
 
-    output_dir = 'missed_and_received_data/fast'
+    # generate filename from peer IP
     filename = output_dir + '/' + peer + '_' + str(start_ts) + '_' + str(
         end_ts)
 
@@ -168,6 +166,7 @@ def fast_read_mis_rec_lists(config, peer, configfilename):
         return file_cache[filename]
     elif (os.path.isfile(filename)):
         # use existing file
+        # TODO make nice
         ret = list(
             map(
                 lambda x: (x[0], int(x[1]), x[2], x[3], eval(x[4]), eval(x[5]),
@@ -179,7 +178,6 @@ def fast_read_mis_rec_lists(config, peer, configfilename):
 
     else:
         return []
-        # assert False, "Missed Received File not found:" + filename
 
 
 if (__name__ == "__main__"):

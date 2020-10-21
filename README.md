@@ -1,3 +1,10 @@
+# General Notes
+
+We often say peer and vantage point (vp) are synonyms an refer the to peer of
+route collectors. 
+
+If you have questions don't hesitate to contact clemens.mosig@fu-berlin.de
+
 # Download of BGP update dumps
 
 Run the python download script from the respective project directory which is
@@ -26,4 +33,17 @@ into a list of updates with timestamps, which note where we send updates from
 Beacons and thus expect them so see them at route collectors. The results of
 this script are automatically saved.
 
+## Match received updates with expected updates
+
+Run the script:
+
+    python3 ../../code/generate_missed_received_lists.py config.ini
+
+This script uses loads the BGP update dumps, splits them by peer and then
+matches the announcements with the Beacon events (generated from expected
+updates file). Additionally, the matched updates are saved into a directory
+(`missed_received_data`) split by peer IP. 
+
 # Path Labeling
+
+
