@@ -6,6 +6,7 @@ import bgpana as bap
 import config_util as confu
 from datetime import timezone
 from datetime import datetime
+import numpy as np
 import configparser
 import expected_updates as exup
 import pandas as pd
@@ -31,7 +32,7 @@ exp_cache = dict(
         expected_updates_df[expected_updates_df["prefix"] == p]["send-ts"]
         for p in prefixes
     ]))
-output_dir = 'missed_and_received_data/'
+output_dir = 'matched_updates/'
 
 
 # finds the closest expected update for the aggregator IP in given received
@@ -46,11 +47,9 @@ def round_send_ts(send_ts, prefix):
     return min(exp_cache[prefix], key=lambda x: abs(x - send_ts))
 
 
-def match_updates(peer, peer_subdf, output_dir, cache=True):
-    uti.log(f"starting to calculate for peer {peer}")
-
+def match_updates(peer, peer_subdf, cache=True):
     # filename for peer mis_rec_file
-    filename = output_dir + peer + '_' + str(start_ts) + '_' + str(end_ts)
+    filename = f"{output_dir}{peer}_{start_ts}_{end_ts}.gz"
 
     # use existing file
     if (cache and os.path.isfile(filename)):
@@ -114,7 +113,11 @@ def match_updates(peer, peer_subdf, output_dir, cache=True):
     peer_subdf = peer_subdf[columns]
 
     # save file. one per vantage point
-    peer_subdf.to_csv(filename, sep='|', header=None, index=False)
+    peer_subdf.to_csv(filename,
+                      sep='|',
+                      header=None,
+                      index=False,
+                      compression="gzip")
 
 
 def generate_missed_received_list(cache=True):
@@ -130,7 +133,7 @@ def generate_missed_received_list(cache=True):
                                         "update", "record-ts", "peer-IP",
                                         "prefix", "as-path", "aggregator-ip"
                                     ],
-                                    usecols=[1, 2, 6, 7, 9, 14])
+                                    usecols=[1, 2, 8, 9, 11, 17])
     actual_updates_df = actual_updates_df[(actual_updates_df["update"] == 'A')
                                           |
                                           (actual_updates_df["update"] == 'W')]
@@ -159,25 +162,35 @@ def fast_read_mis_rec_lists(peer):
     # returns not the complete mis_received file, but only lines with rfd=True
 
     # generate filename from peer IP
-    filename = output_dir + '/' + peer + '_' + str(start_ts) + '_' + str(
-        end_ts)
+    filename = f"{output_dir}{peer}_{start_ts}_{end_ts}.gz"
 
     if filename in file_cache:
         return file_cache[filename]
     elif (os.path.isfile(filename)):
-        # use existing file
-        # TODO make nice
-        ret = list(
-            map(
-                lambda x: (x[0], int(x[1]), x[2], x[3], eval(x[4]), eval(x[5]),
-                           eval(x[6])),
-                (map(lambda x: x.split('|'),
-                     open(filename, 'r').read().splitlines()))))
+        ret = pd.read_csv(filename,
+                          names=[
+                              "prefix", "send-ts", "update_type", "peer",
+                              "update_found", "path", "actual_update_ts"
+                          ],
+                          sep="|",
+                          header=None,
+                          dtype={
+                              "prefix": str,
+                              "send-ts": np.int32,
+                              "update_type": "category",
+                              "peer": "category",
+                              "update_found": bool,
+                          },
+                          converters={
+                              "path": eval,
+                              "actual_update_ts": eval
+                          })
+
         file_cache[filename] = ret
         return ret
 
     else:
-        return []
+        return pd.DataFrame()
 
 
 if (__name__ == "__main__"):

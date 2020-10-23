@@ -20,7 +20,7 @@ min_delta_readvertisment = int(config["general"]["min-delta-readvertisment"])
 
 # share of Bursts that have to match the update pattern for the whole path to
 # be RFD true
-minimum_pattern_match = 0.90
+minimum_pattern_match = 0.9
 
 # get timestamps for burst start based on crontab present in config
 burst_starts_temp = confu.get_burst_starts(config)
@@ -93,11 +93,7 @@ def _check_update_pattern_burst(mis_rec_df):
 def detect_rfd_single_new(peer):
 
     # load received updates for respective peer
-    mis_rec_df = pd.DataFrame(mrl.fast_read_mis_rec_lists(peer=peer),
-                              columns=[
-                                  "prefix", "send-ts", "update_type", "peer",
-                                  "update_found", "path", "actual_update_ts"
-                              ])
+    mis_rec_df = mrl.fast_read_mis_rec_lists(peer=peer)
 
     # sometimes df can be empty
     if mis_rec_df.size == 0:

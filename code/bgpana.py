@@ -80,14 +80,6 @@ def link_on_path(link: ASlink, path: ASpath) -> bool:
         return False
 
 
-# def check_IPv4_syntax(ip: str) -> bool:
-#     return validators.ip_address.ipv4(ip)
-
-
-# def check_IPv6_syntax(ip: str) -> bool:
-#     return validators.ip_address.ipv6(ip)
-
-
 def init_as_rel(as_rel: str):
     if not os.path.exists(as_rel):
         raise FileNotFoundError(

@@ -10,6 +10,10 @@ either `data/march` or `data/april`. Pass the configuration file as parameter.
 The configuration file contains all information of the experiment such as
 update interval or prefixes. 
 
+Some scripts are very resource intensive, but scale well on machines with many
+cores. If you want to test the scripts on your laptop reduce the measurement
+period from one month to something smaller, like half a day.
+
 # Preparation 
 
 ## Download of BGP update dumps
