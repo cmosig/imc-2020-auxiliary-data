@@ -12,13 +12,17 @@ import sys
 import utilities as uti
 
 url_suffixes = None
+remove_route_collector_merge_files = True
+merge_route_collector_files = True
 
 
 def get_url_suffixes(start_ts, end_ts):
     url_suffixes = []  #[(month,url_suffix)]
 
-    #find first and last 5 minute mark
-    first_5_min_mark = (((start_ts - 1) // 300) + 1) * 300
+    # find first and last 5 minute mark
+    # we download files 15 min before the actual start so that we do not miss any
+    # updates other files with possibly incorrect timestamps
+    first_5_min_mark = ((((start_ts - 1) // 300) + 1) * 300) - 900
     last_5_min_mark = (end_ts // 300) * 300
     all_5_min_marks = [
         first_5_min_mark + 300 * i
@@ -53,11 +57,11 @@ def _download_dumps(rc_project, rc_names):
         for url_suffix in url_suffixes:
             # depending on the route rc-project we need a different URL format
             if rc_project == "routeviews":
-                if rc == "":
-                    add = ""
+                if rc == "route-views2":
+                    rc_string = ""
                 else:
-                    add = "/"
-                url = f"http://archive.routeviews.org{add}{rc}/bgpdata/{url_suffix[0].replace('_', '.')}/UPDATES/updates.{url_suffix[1]}"
+                    rc_string = f"/{rc}"
+                url = f"http://archive.routeviews.org{rc_string}/bgpdata/{url_suffix[0].replace('_', '.')}/UPDATES/updates.{url_suffix[1]}"
 
             elif rc_project == "isolario":
                 url = f"https://www.isolario.it/Isolario_MRT_data/{rc}/{url_suffix[0]}/updates.{url_suffix[1]}"
@@ -90,15 +94,16 @@ def _download_dumps(rc_project, rc_names):
 
 def download_routeviews():
     route_collectors = [
-        "", "route-views.sg", "route-views.perth", "route-views.sfmix",
-        "route-views.mwix", "route-views.rio", "route-views.fortaleza",
-        "route-views.gixa", "route-views3", "route-views4", "route-views6",
-        "route-views.amsix", "route-views.chicago", "route-views.chile",
-        "route-views.eqix", "route-views.flix", "route-views.gorex",
-        "route-views.isc", "route-views.kixp", "route-views.jinx",
-        "route-views.linx", "route-views.napafrica", "route-views.nwax",
-        "route-views.phoix", "route-views.telxatl", "route-views.wide",
-        "route-views.sydney", "route-views.saopaulo", "route-views2.saopaulo"
+        "route-views2", "route-views.sg", "route-views.perth",
+        "route-views.sfmix", "route-views.mwix", "route-views.rio",
+        "route-views.fortaleza", "route-views.gixa", "route-views3",
+        "route-views4", "route-views6", "route-views.amsix",
+        "route-views.chicago", "route-views.chile", "route-views.eqix",
+        "route-views.flix", "route-views.gorex", "route-views.isc",
+        "route-views.kixp", "route-views.jinx", "route-views.linx",
+        "route-views.napafrica", "route-views.nwax", "route-views.phoix",
+        "route-views.telxatl", "route-views.wide", "route-views.sydney",
+        "route-views.saopaulo", "route-views2.saopaulo", "route-views.soxrs"
     ]
 
     return _download_dumps(rc_project="routeviews", rc_names=route_collectors)
@@ -112,7 +117,7 @@ def download_isolario():
 def download_ripe_ris():
     route_collectors = [
         "rrc00", "rrc01", "rrc03", "rrc04", "rrc05", "rrc06", "rrc07", "rrc10",
-        "rrc11", "rrc12", "rrc13", "rrc14", "rrc15", "rrc16", "rrc18", "rrc19"
+        "rrc11", "rrc12", "rrc13", "rrc14", "rrc15", "rrc16", "rrc18", "rrc19",
         "rrc20", "rrc21", "rrc22", "rrc23", "rrc24"
     ]
     return _download_dumps(rc_project="ris", rc_names=route_collectors)
@@ -133,6 +138,7 @@ def download_updates(configfile):
 
     global bgpreader_arguments
     bgpreader_arguments = []
+    # this is important because we download more files than we need
     bgpreader_arguments.append('-w ' + str(start_ts) + ',' + str(end_ts))
     bgpreader_arguments.append('-t updates')
     for prefix in prefixes:
@@ -158,19 +164,21 @@ def download_updates(configfile):
     riperis_output_file = download_ripe_ris()
     routeviews_output_file = download_routeviews()
 
-    # merge both
-    merge_command = f"cat\
-            {isolario_output_file}\
-            {routeviews_output_file}\
-            {riperis_output_file}\
-            > {filename}"
+    # merge all route collectore files
+    if merge_route_collector_files:
+        merge_command = f"cat\
+                {isolario_output_file}\
+                {routeviews_output_file}\
+                {riperis_output_file}\
+                > {filename}"
 
-    subprocess.Popen(merge_command, shell=True).wait()
+        subprocess.Popen(merge_command, shell=True).wait()
 
     # remove other files
-    os.remove(isolario_output_file)
-    os.remove(routeviews_output_file)
-    os.remove(riperis_output_file)
+    if remove_route_collector_merge_files:
+        os.remove(isolario_output_file)
+        os.remove(routeviews_output_file)
+        os.remove(riperis_output_file)
 
 
 if (__name__ == "__main__"):
