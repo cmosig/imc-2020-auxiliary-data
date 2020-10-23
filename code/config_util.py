@@ -1,4 +1,4 @@
-#helps to retrieve information from the config easier
+# helps to retrieve information from the config easier
 
 import pandas as pd
 import networkx as nx
