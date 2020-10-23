@@ -1,4 +1,5 @@
 import scipy.stats
+import bgpana as bap
 import networkx as nx
 import numpy as np
 import random as rand
@@ -14,7 +15,6 @@ import numba
 import matplotlib
 import os
 import pandas as pd
-task = int(os.getenv('task'))
 
 
 def normpdf(x, sd, mean):
@@ -26,10 +26,11 @@ def normpdf(x, sd, mean):
 
 
 # read in the data
-df = pd.read_csv('rfd_paths_for_caitlin.csv', sep='|', header=None)
-df.columns = ['vantage_point_ip', 'prefix', 'path', 'rfd']
-df['path'] = df.path.apply(lambda x: x.split(','))
-df['path'] = df.path.apply(lambda x: [int(o) for o in x])
+df = pd.read_csv('rfd_paths_BeCAUSe_format_5.csv',
+                 sep='|',
+                 usecols=[1, 2, 3, 4],
+                 converters={"path": lambda x: [int(o) for o in eval(x)]})
+print(df)
 nodes = set()
 for each in df['path']:
     for i in each:
@@ -157,7 +158,7 @@ def mcmc(D0, D1, n, iterations, burn_in=1, record_step=None, sd=1):
             old,
         ))[0])
 
-        # accept or reject move (and update sampels)
+        # accept or reject move (and update samples)
         if math.log(rand.random()) < alpha:
             acceptance += 1
             # print('yes')
@@ -166,11 +167,9 @@ def mcmc(D0, D1, n, iterations, burn_in=1, record_step=None, sd=1):
             LL0_s = LL0_s_new
             LL1 = LL1_new
             N[node] = N_[node]
-            if record_step:
-                if it > burn_in:
-                    if it % record_step == 0:
-                        for l in range(n):
-                            save[l].append(N[l][0])
+            if record_step and it > burn_in and it % record_step == 0:
+                for l in range(n):
+                    save[l].append(N[l][0])
         else:
             N_[node] = N[node]
 
@@ -181,13 +180,8 @@ def mcmc(D0, D1, n, iterations, burn_in=1, record_step=None, sd=1):
         return N
 
 
-# implement
-# run this in parallel to take the required samples
 iterations = n * 1000
-save_its = 2
-save = np.zeros((n, save_its))
-for k in range(save_its):
-    print(k)
+def run_mcmc_iterations(n):
     N_out = mcmc(D0,
                  D1,
                  D0.shape[1],
@@ -195,8 +189,14 @@ for k in range(save_its):
                  burn_in=n,
                  record_step=None,
                  sd=1)
-    save[:, k] = N_out[:, 0]
+    return N_out[:, 0]
 
-np.save(
-    'save/rfd_mcmc_output_iterations=' + str(iterations) + 'task=' +
-    str(task) + '.npy', save)
+
+# TODO what does this number mean? Why only two?
+save_its = 2
+save = np.zeros((n, save_its))
+results = bap.paral(run_mcmc_iterations, [list(range(save_its))])
+for k, r in enumerate(results):
+    save[:, k] = r
+
+np.save('save/rfd_mcmc_output_iterations=' + str(iterations) + '.npy', save)
