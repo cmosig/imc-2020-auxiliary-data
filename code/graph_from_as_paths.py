@@ -1,12 +1,12 @@
 import networkx as nx
+import bgpana as bap
+import pandas as pd
 from networkx.drawing import nx_agraph
 from networkx.drawing.nx_agraph import to_agraph, write_dot
 import config_util as confu
 import configparser
 from joblib import Parallel, delayed
 import multiprocessing
-# TODO maybe replace vp database tool with something better
-import vp_database_tool as vpdb
 import sys
 import itertools
 
@@ -18,14 +18,23 @@ normal_as_color = 'lightskyblue'
 beacon_as_color = 'plum'
 selected_as_color = 'chartreuse'
 
+vp_ip_asn_mapping = pd.read_csv(
+    "asn_ip_mapping.csv", sep="|",
+    dtype=str).set_index("peer-IP")["peer-ASn"].to_dict()
 
-def create_rfd_graph_single(peer, config, rfd_results_df_peer, all_peer_asns):
-    peer_asn = vpdb.get_vp_asn(peer)
+#config variables
+config = configparser.ConfigParser()
+config.read("config.ini")
+
+
+def create_rfd_graph_single(peer, all_peer_asns, rfd_results_df_peer):
+    peer_asn = vp_ip_asn_mapping[peer]
 
     #create one graph for each peer
     MG = nx.MultiDiGraph()  #multi and directed graph
 
-    output_dir = config["general"]["as-graph-dir"]
+    output_dir = "as_graphs/"
+    bap.prep_dir(output_dir)
 
     #create nodes (all ASes)
     nodes = list(
@@ -70,27 +79,10 @@ def create_rfd_graph_single(peer, config, rfd_results_df_peer, all_peer_asns):
     for edge, color in list(edge_color_map.items()):
         if (color == rfd_color):
             MG.add_edge(edge[1], edge[0], color=color, penwidth=2)
-
-    filename = 'as_graph_' + peer + '_AS' + peer_asn + '.pdf'
-    if (maybe_rfd_color in [v for k, v in list(edge_color_map.items())]):
-        print(filename)
-    if (rfd_color in [v for k, v in list(edge_color_map.items())]):
-        print(filename)
-
-    A = to_agraph(MG)
-    A.layout('dot')
-    A.graph_attr['label'] = 'VP: ' + peer + ' (AS' + peer_asn + ')'
-    A.graph_attr['labelloc'] = 't'
-    A.graph_attr['fontsize'] = 20
-    A.draw(output_dir + filename)
     write_dot(MG, output_dir + "as_graph_" + peer_asn + "_" + peer + ".dot")
 
 
-def create_rfd_graph(configfile):
-
-    #config variables
-    config = configparser.ConfigParser()
-    config.read(configfile)
+def create_rfd_graph():
 
     rfd_results_df = confu.get_rfd_results(config)
     peers = confu.get_list_of_relevant_peers(config)
@@ -105,16 +97,12 @@ def create_rfd_graph(configfile):
     #     | (rfd_results_df["prefix"] == "147.28.52.0/24")
     #     | (rfd_results_df["prefix"] == "45.132.188.0/24")]
 
-    all_peer_asns = list(map(lambda x: vpdb.get_vp_asn(x), peers))
+    all_peer_asns = list(map(lambda x: vp_ip_asn_mapping[x], peers))
 
-    num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(create_rfd_graph_single)(
-        peer=peer,
-        all_peer_asns=all_peer_asns,
-        config=config,
-        rfd_results_df_peer=rfd_results_df[rfd_results_df["peer"] == peer])
-                               for peer in peers)
+    bap.paral(create_rfd_graph_single, [
+        peers, [all_peer_asns] * len(peers),
+        [rfd_results_df[rfd_results_df["peer"] == peer] for peer in peers]
+    ])
 
 
-create_rfd_graph(sys.argv[1])
-create_all(sys.argv[1])
+create_rfd_graph()

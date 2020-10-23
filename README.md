@@ -45,6 +45,12 @@ Simply run:
 
     python3 ../../code/generate_list_of_peers.py config.ini
 
+## Create ASN IP mapping
+
+Simply run:
+
+    python3 ../../code/generate_asn_vp_ip_mapping.py
+
 
 ## Match received updates with expected updates
 
@@ -80,7 +86,7 @@ Run:
 
 Run:
 
-    python3 ../../code/graph_from_as_paths.py config.ini
+    python3 ../../code/graph_from_as_paths.py 
 
 This script creates an AS graph as seen from each vantage point. This
 information is required for metric 2 when using the heuristics for pinpointing.
@@ -89,4 +95,4 @@ Then run the script:
 
     python3 ../../code/heuristics_pinpointing.py
 
-
+This script pinpoints ASes based on the heuristic approach. 

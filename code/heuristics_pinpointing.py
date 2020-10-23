@@ -20,7 +20,7 @@ from collections import defaultdict
 from collections import Counter
 import bgpana as bap
 import config_util as confu
-import as_appearance_on_all_paths as asap
+from scipy import stats
 uti.log("done ")
 
 # ------------------------------------------------------------
@@ -103,6 +103,76 @@ uti.log("done ")
 # ------------------------------------------------------------
 
 
+def get_info_update_dist(timestamps, burst_starts, burst_length):
+    # total bin count. this should change if the updates/burst changes
+    # TODO change that, so that it is dynamic
+    bin_count = 24
+    bins = np.linspace(0, burst_length, bin_count)
+    bin_width = bins[1] - bins[0]
+    # x values shall be in the middle of the bins
+    x_values = np.asarray(list(map(lambda x: x + (bin_width / 2), bins)))
+
+    timestamps_normalized = []
+    all_y_values = []
+
+    for burst_start in burst_starts:
+        # get timestamps in burst
+        timestamps_in_burst = timestamps[timestamps.between(
+            burst_start,
+            burst_start + burst_length)].apply(lambda x: x - burst_start)
+        timestamps_normalized += timestamps_in_burst.tolist()
+        timestamps_in_break = timestamps[timestamps.between(
+            burst_start + burst_length,
+            burst_start + 2 * burst_length)].apply(lambda x: x - burst_start)
+        timestamps_normalized += timestamps_in_break.tolist()
+
+        # can't calculate relative change if there are not updates in the
+        # burst.  so go to next burst
+        if (timestamps_in_burst.size <= 1):
+            continue
+
+        # each timestamp is put into a bin.
+        # digitize returns bin index for each timestamp
+        bin_indexes = np.digitize(timestamps_in_burst, bins)
+
+        # count how often each index occurs
+        bin_index_counter = Counter(bin_indexes)
+        # [(index,index_count)]
+        bin_heights = np.asarray(
+            [bin_index_counter[index] for index in range(bin_count)])
+
+        # linear regression
+        slope_, intercept_, r_value, p_value, std_err = stats.linregress(
+            x_values, bin_heights)
+        y_values = intercept_ + slope_ * x_values
+        all_y_values.append(y_values)
+
+    # get the average linear regression line
+    if all_y_values:
+        y_values_merged = [
+            np.median([slot_ys])
+            for slot_ys in np.rot90(np.array(all_y_values))
+        ]
+        y_values_merged.reverse()
+    else:
+        y_values_merged = [0] * bin_count
+
+    if (y_values_merged[0] != 0):
+        rel_change = (y_values_merged[-1] -
+                      y_values_merged[0]) / y_values_merged[0]
+    else:
+        rel_change = 0.0
+
+    slope = (y_values_merged[-1] - y_values_merged[0]) / (x_values[-1] -
+                                                          x_values[0])
+
+    # this is only the projected x_hit in a really janky way
+    # x_hit = y_values_merged[0] / slope
+    x_hit = 0  # DEPRECATED
+
+    return slope, x_hit, rel_change, x_values, y_values_merged, timestamps_normalized
+
+
 def _get_nodes(path):
     return path
 
@@ -145,14 +215,8 @@ def _get_alternative_paths_for_single_rfd_path(series):
         ts for (p, ts, upd) in exp_updates_global if upd == 'A' and p == prefix
     ]
 
-    missed_and_received_vp = pd.DataFrame(
-        mrl.fast_read_mis_rec_lists(peer=vp,
-                                    config=config,
-                                    configfilename=configfile),
-        columns=[
-            "prefix", "update_ts", "update_type", "peer", "update_found",
-            "path", "actual_update_ts"
-        ])
+    # retrieve received updates for vantage point
+    missed_and_received_vp = mrl.fast_read_mis_rec_lists(vp)
 
     # convert path into tuple, because lists are not hashable
     missed_and_received_vp.loc[:,
@@ -166,7 +230,7 @@ def _get_alternative_paths_for_single_rfd_path(series):
 
     # get all sending timestamps for which we recived announcements
     received_updates = missed_and_received_vp[missed_and_received_vp["path"] ==
-                                              damped_path]["update_ts"]
+                                              damped_path]["send-ts"]
 
     # filter by prefix and update type
     alternative_path_candidates = missed_and_received_vp[
@@ -216,7 +280,7 @@ def _get_alternative_paths_for_single_rfd_path(series):
 
         # take only updates that are in the Burst
         alternative_path_candidates_burst = alternative_path_candidates[
-            alternative_path_candidates["update_ts"].between(
+            alternative_path_candidates["send-ts"].between(
                 burst_start, burst_start + burst_length)]
 
         # if there were no alternative path candidates in this burst then go to
@@ -228,12 +292,12 @@ def _get_alternative_paths_for_single_rfd_path(series):
         # after damp
         # NOTE: count() does not count NaNs, size() does
         update_counts_burst = alternative_path_candidates_burst[[
-            "path", "update_ts"
+            "path", "send-ts"
         ]].groupby(["path"]).count()
 
         update_counts_after_damp = alternative_path_candidates_burst[
-            alternative_path_candidates_burst["update_ts"] > burst_start +
-            time_til_damp][["path", "update_ts"]].groupby(["path"]).count()
+            alternative_path_candidates_burst["send-ts"] > burst_start +
+            time_til_damp][["path", "send-ts"]].groupby(["path"]).count()
 
         # if there are no updates after the damp then go to next burst
         if (update_counts_after_damp.empty):
@@ -247,12 +311,12 @@ def _get_alternative_paths_for_single_rfd_path(series):
             rsuffix="_all")
 
         # normalize by leftover time betwen damp and end of burst
-        merged_update_counts["update_ts_after_norm"] = merged_update_counts[
-            "update_ts_after"] / (burst_length - time_til_damp)
+        merged_update_counts["send-ts_after_norm"] = merged_update_counts[
+            "send-ts_after"] / (burst_length - time_til_damp)
 
         # normalize by length of burst
-        merged_update_counts["update_ts_all_norm"] = merged_update_counts[
-            "update_ts_all"] / burst_length
+        merged_update_counts["send-ts_all_norm"] = merged_update_counts[
+            "send-ts_all"] / burst_length
 
         # calculate ratio between updates/s after damp and overall
         #
@@ -260,7 +324,7 @@ def _get_alternative_paths_for_single_rfd_path(series):
         # ratio < 1 : fewer updates/s for that path after damp
         # ratio > 1 : more updates for that path after damp
         merged_update_counts["ratio"] = merged_update_counts[
-            "update_ts_after_norm"] / merged_update_counts["update_ts_all_norm"]
+            "send-ts_after_norm"] / merged_update_counts["send-ts_all_norm"]
 
         # BAD! YOU FOOL MARCIN IS COOL!
         # altpath_ratios_burst = merged_update_counts[[
@@ -304,7 +368,7 @@ def _fill_with_alternative_paths(rfd_results):
 
 @lru_cache(maxsize=1000)
 def _get_subgraph(vp):
-    directory = config["general"]["as-graph-dir"]
+    directory = "as_graphs/"
     files = pd.Series(os.listdir(directory))
     files = files[files.apply(
         lambda filename: vp in filename and 'dot' in filename)]
@@ -514,8 +578,8 @@ def _M3_announcement_distribution(get_entities, raw_updates):
         len(timestamps) > 0
         for timestamps in ent_timestamps.values()), "timestamps got lost"
 
-    disribution_results = bap.paral(asap.get_info_update_dist, [
-        map(pd.Series, ent_timestamps.values()), [burst_starts] *
+    disribution_results = bap.paral(get_info_update_dist, [
+        list(map(pd.Series, ent_timestamps.values())), [burst_starts] *
         len(ent_timestamps), [burst_length] * len(ent_timestamps)
     ])
 
@@ -643,6 +707,7 @@ def link_analysis(rfd_results, raw_updates):
 
     results = {}
     for prefix_set, set_id in prefix_sets:
+        uti.log(f"Running for prefix set: {prefix_set}")
         M1_results, M2_results, M3_results = None, None, None
         # filter RFD results to only contain prefixes in the prefix set
         prefix_set_rfd_results = rfd_results[rfd_results["prefix"].apply(
@@ -685,6 +750,7 @@ def node_analysis(rfd_results, raw_updates):
 
     results = {}
     for prefix_set, set_id in prefix_sets:
+        uti.log(f"Running for prefix set: {prefix_set}")
         M1_results, M2_results, M3_results = None, None, None
         # filter RFD results to only contain prefixes in the prefix set
         prefix_set_rfd_results = rfd_results[rfd_results["prefix"].apply(
@@ -793,7 +859,7 @@ def main():
             config["general"]["input-file"],
             sep='|',
             header=None,
-            usecols=[1, 2, 7, 9],
+            usecols=[1, 2, 9, 11],
             names=["type", "timestamp", "prefix", "path"])
 
     if (RUN_M2_Links or RUN_M2_Nodes):
@@ -825,3 +891,5 @@ def main():
         uti.log("Computing LINK Summary")
         link_summary(link_results)
         uti.log("LINK Summary done")
+
+main()
