@@ -3,16 +3,22 @@
 We often say peer and vantage point (vp) are synonyms an refer the to peer of
 route collectors. 
 
-If you have questions don't hesitate to contact clemens.mosig@fu-berlin.de
+If you have questions don't hesitate to contact clemens.mosig@fu-berlin.de and
+caitlin.gray@student.adelaide.edu.au.
 
-Run the python scripts from the respective project directory which is
-either `data/march` or `data/april`. Pass the configuration file as parameter.
-The configuration file contains all information of the experiment such as
-update interval or prefixes. 
+Run the python scripts from the respective project directory which is either
+data/march or data/april. The configuration file (config.ini) contains all
+information of the experiment such as update interval or prefixes. 
 
 Some scripts are very resource intensive, but scale well on machines with many
 cores. If you want to test the scripts on your laptop reduce the measurement
-period from one month to something smaller, like half a day.
+period from one month to something smaller such as a day.
+
+# Run all
+
+From the respective project directory run `../../code/run_all.sh`. Make sure
+you have our fork of libbgpstream installed and all python packages in
+requirements.txt.
 
 # Preparation 
 
@@ -20,7 +26,7 @@ period from one month to something smaller, like half a day.
 
 Run:
 
-    python3 ../../code/download_data.py config.ini
+    python3 ../../code/download_data.py 
 
 The script queries the Isolario, RIPE RIS, and RouteViews dump archives. Note
 that you are required to download and install CAIDA's `bgpreader`, specifically
@@ -32,7 +38,7 @@ our custom fork:
 
 Run the script:
 
-    python3 ../../code/expected_updates.py config.ini
+    python3 ../../code/expected_updates.py 
 
 This takes the crontabs from the config file for each prefix and converts them
 into a list of updates with timestamps, which note where we send updates from
@@ -43,7 +49,9 @@ this script are automatically saved.
 
 Simply run:
 
-    python3 ../../code/generate_list_of_peers.py config.ini
+    python3 ../../code/generate_list_of_peers.py 
+
+Create list of peers based on the update dump.
 
 ## Create ASN IP mapping
 
@@ -51,12 +59,14 @@ Simply run:
 
     python3 ../../code/generate_asn_vp_ip_mapping.py
 
+Create a mapping between peer IP and AS number.
+
 
 ## Match received updates with expected updates
 
 Run the script:
 
-    python3 ../../code/generate_missed_received_lists.py config.ini
+    python3 ../../code/generate_missed_received_lists.py 
 
 This script uses loads the BGP update dumps, splits them by peer and then
 matches the announcements with the Beacon events (generated from expected
@@ -68,7 +78,7 @@ updates file). Additionally, the matched updates are saved into a directory
 
 Run the script:
 
-    python3 ../../code/label_paths.py config.ini
+    python3 ../../code/label_paths.py 
 
 This script labels paths with RFD True and False based on the RFD signature.
 

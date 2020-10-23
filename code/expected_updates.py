@@ -50,4 +50,4 @@ def get_expected_updates(configfile, cache=True):
 
 if (__name__ == "__main__"):
     # always generate new file when called from command line
-    get_expected_updates(sys.argv[1], cache=False)
+    get_expected_updates("config.ini", cache=False)

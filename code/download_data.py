@@ -182,4 +182,4 @@ def download_updates(configfile):
 
 
 if (__name__ == "__main__"):
-    download_updates(sys.argv[1])
+    download_updates("config.ini")

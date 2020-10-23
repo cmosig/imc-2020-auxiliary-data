@@ -30,4 +30,4 @@ def get_list_of_peers(configfile):
 
 
 if (__name__ == "__main__"):
-    get_list_of_peers(sys.argv[1])
+    get_list_of_peers("config.ini")
