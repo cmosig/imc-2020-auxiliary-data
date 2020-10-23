@@ -19,21 +19,14 @@ def get_list_of_peers(configfile):
     input_file = config["general"]["input-file"]
     filename = 'all_peers_' + start_ts + '_' + end_ts
     config["general"]["all-peers"] = filename
-    command = "awk -F '|' '{if (!seen[$7]++) {print $7}}'" + f" {input_file} > {filename}"
-    print(command)
-    os.system(command)
-
-    # filter IPs based on syntax
-    good_IPs = []
-    with open(filename, 'r') as f:
-        all_IPs = f.read().splitlines()
-        for IP in all_IPs:
-            if bap.check_IPv4_syntax(IP) or bap.check_IPv6_syntax(IP):
-                good_IPs.append(IP + '\n')
-    open(filename, 'w').writelines(good_IPs)
-
+    command = f"zcat {input_file}" + "| awk -F '|' '{if (!seen[$9]++) {print $9}}'" + f" > {filename}"
+    # save to config
     with open(configfile, 'w') as f:
         config.write(f)
+
+    # print and execute command
+    print(command)
+    os.system(command)
 
 
 if (__name__ == "__main__"):
