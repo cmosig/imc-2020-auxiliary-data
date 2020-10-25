@@ -86,11 +86,10 @@ This script labels paths with RFD True and False based on the RFD signature.
 
 ## BeCAUSe 
 
-Run: 
-
-    python3 ../../code/BeCAUSe/path_format_BeCAUSe.py
-    python3 ../../code/BeCAUSe/create_summaries.py
-
+    python3 ../../code/path_format_BeCAUSe.py
+    python3 ../../code/MCMC_network_tomography.py
+    python3 ../../code/HMC_network_tomography.py
+    python3 ../../code/create_summaries.py
 
 ## Heuristics 
 
