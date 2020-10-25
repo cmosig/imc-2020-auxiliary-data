@@ -8,46 +8,45 @@ import matplotlib.pyplot as plt
 import pickle
 import pandas as pd
 # DATA
-filepath=''
+filepath = ''
 samplesfilename = 'RFD_hmc_samples'
 
 ## "Read in data and manipulate"
 filename = 'rfd_paths_caitlin_format_1.csv'
 
-df = pd.read_csv(filename,sep='|',header=0)
-df['path']=df.path.apply(eval)
-df['path']=df.path.apply(lambda x: [int(o) for o in x])
+df = pd.read_csv(filename, sep='|', header=0)
+df['path'] = df.path.apply(eval)
+df['path'] = df.path.apply(lambda x: [int(o) for o in x])
 nodes = set()
 for each in df['path']:
     for i in each:
         nodes.add(i)
-i=0
-node_index={}
+i = 0
+node_index = {}
 for each in nodes:
     node_index[i] = each
-    i+=1
-node_index_inv = {v:i for i,v in node_index.items()}
+    i += 1
+node_index_inv = {v: i for i, v in node_index.items()}
 df['Data'] = df.path.apply(lambda x: [node_index_inv[i] for i in x])
 n = len(nodes)
 
 # need matrix of D (binary: Dij = 1 if node j on path i)
 # also make vector RFD (binary 1 if RFD else 0)
-D  = np.zeros((len(df),n))
-RFD=np.zeros(len(df), dtype=bool)
-k=0
-j=len(df)-1
-for i,row in df.iterrows():
+D = np.zeros((len(df), n))
+RFD = np.zeros(len(df), dtype=bool)
+k = 0
+j = len(df) - 1
+for i, row in df.iterrows():
     if row.rfd:
         for nodes in row.Data:
-            D[k,nodes] = 1
+            D[k, nodes] = 1
         RFD[k] = 1
-        k+=1
+        k += 1
     else:
         for nodes in row.Data:
-            D[j,nodes] = 1
+            D[j, nodes] = 1
         RFD[j] = 0
-        j-=1
-
+        j -= 1
 
 ## Create the PyStan Model
 stancode = """
@@ -104,31 +103,27 @@ data_dict_test = {
     'D': data
 }
 
-
 # decide on required iterations/chains (run with 1000,2 and assess the output)
 iterations = 1000
 chains = 2
 
 # do the sampling (be patient)
-fit_test = sm_test.sampling(data=data_dict_test, iter=iterations, chains=chains)#,algorithm="HMC")
+fit_test = sm_test.sampling(data=data_dict_test,
+                            iter=iterations,
+                            chains=chains)  #,algorithm="HMC")
 # print(fit_test)
 
-samples = fit_test.to_dataframe().transpose() 
-samples = samples.iloc[3:-7] # get the acutal samples
-samples['nodes']={v:i for i,v in node_index.items()}
-samples=samples.set_index('nodes')
+samples = fit_test.to_dataframe().transpose()
+samples = samples.iloc[3:-7]  # get the acutal samples
+samples['nodes'] = {v: i for i, v in node_index.items()}
+samples = samples.set_index('nodes')
 
-samples.to_csv(filepath+filename[:-4]+samplesfilename+'.csv')
-
-
+samples.to_csv(filepath + filename[:-4] + samplesfilename + '.csv')
 
 with open('rfd_basic_model_fit.pkl', 'wb') as f:
     pickle.dump(fit_test, f)
 
-
-
-
-# Stan code for different Prior distributions 
+# Stan code for different Prior distributions
 # uncomment if needed
 # UNIFORM prior
 ##stancode_uniform_prior = """
@@ -295,10 +290,10 @@ with open('rfd_basic_model_fit.pkl', 'wb') as f:
 ###     pickle.dump(fit_prior1, f)
 ##
 
+# plotting if you like
 
-# plotting if you like 
 
-def kde_scipy(x, x_grid, bandwidth= None, **kwargs):
+def kde_scipy(x, x_grid, bandwidth=None, **kwargs):
     """Kernel Density Estimation with Scipy"""
     # Note that scipy weights its bandwidth by the covariance of the
     # input data.  To make the results comparable to the other methods,
@@ -306,17 +301,20 @@ def kde_scipy(x, x_grid, bandwidth= None, **kwargs):
     kde = gaussian_kde(x, bw_method=bandwidth, **kwargs)
     return kde.evaluate(x_grid)
 
+
 row = 21
 col = 29
 
-fig, ax = plt.subplots(row,col,figsize=(30,40))
-k=list(range(col))* row
-hpd=True
+fig, ax = plt.subplots(row, col, figsize=(30, 40))
+k = list(range(col)) * row
+hpd = True
 mean = False
 for i in range(n):
-    ax[i//col][k[i]].hist(samples.iloc[i],bins =np.linspace(0,1,11),color = 'k' )
-    ax[i//col][k[i]].plot(samples.iloc[i],np.linspace(0,1,100),color = 'b' )
+    ax[i // col][k[i]].hist(samples.iloc[i],
+                            bins=np.linspace(0, 1, 11),
+                            color='k')
+    ax[i // col][k[i]].plot(samples.iloc[i], np.linspace(0, 1, 100), color='b')
 
-    ax[i//col][k[i]].set_xlim([0,1])
-    ax[i//col][k[i]].set_yticks([])
-    ax[i//col][k[i]].set_xticks([])
+    ax[i // col][k[i]].set_xlim([0, 1])
+    ax[i // col][k[i]].set_yticks([])
+    ax[i // col][k[i]].set_xticks([])
