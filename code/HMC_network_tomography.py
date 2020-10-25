@@ -9,14 +9,14 @@ def run_hmc(upd_interval):
     uti.log(f"{upd_interval}: hmc starting")
     filename = f"rfd_paths_BeCAUSe_format_{upd_interval}.csv"
 
-    ## Read in data and manipulate
+    # Read in data and manipulate
     df = pd.read_csv(filename,
                      sep='|',
                      usecols=[2, 3],
                      converters={"path": lambda x: [int(o) for o in eval(x)]})
 
     # get unique nodes and create node index
-    node_index = df["path"].explode().drop_duplicates().sort_values()
+    node_index = df["path"].explode().drop_duplicates().sort_values().to_list()
     node_index_inv = dict(zip(node_index, range(len(node_index))))
 
     # translate nodes on path to their index
