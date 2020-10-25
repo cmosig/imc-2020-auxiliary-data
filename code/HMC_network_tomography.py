@@ -113,5 +113,6 @@ def run_hmc(upd_interval):
 
 
 # run hmc for each update interval
-for upd_interval in [1, 2, 3, 5, 10, 15]:
+upd_intervals = [1,2,3] if "march" in os.getcwd() else [5,10,15]
+for upd_interval in upd_intervals:
     run_hmc(upd_interval)
