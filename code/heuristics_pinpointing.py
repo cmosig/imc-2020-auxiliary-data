@@ -31,15 +31,15 @@ RUN_M1_Nodes = True
 RUN_M2_Nodes = True
 RUN_M3_Nodes = True
 
-RUN_M1_Links = True
-RUN_M2_Links = True
-RUN_M3_Links = True
+RUN_M1_Links = False
+RUN_M2_Links = False
+RUN_M3_Links = False
 
 NODE_SUMMARY = True
-LINK_SUMMARY = True
+LINK_SUMMARY = False
 
 PREFIXES_SEEN_NODES = True
-PREFIXES_SEEN_LINKS = True
+PREFIXES_SEEN_LINKS = False
 
 # ------------------------------------------------------------
 # Metric Names, Filenames, Configs
