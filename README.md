@@ -1,8 +1,5 @@
 # General Notes
 
-We often say peer and vantage point (vp) are synonyms an refer the to peer of
-route collectors. 
-
 If you have questions don't hesitate to contact clemens.mosig@fu-berlin.de and
 caitlin.gray@student.adelaide.edu.au.
 
@@ -13,6 +10,9 @@ information of the experiment such as update interval or prefixes.
 Some scripts are very resource intensive, but scale well on machines with many
 cores. If you want to test the scripts on your laptop reduce the measurement
 period from one month to something smaller such as a day.
+
+Peer and vantage point (vp) are synonyms an refer the to peer of route
+collectors. 
 
 # Run all
 
