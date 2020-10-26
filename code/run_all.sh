@@ -6,3 +6,7 @@ python3 ../../code/generate_missed_received_lists.py
 python3 ../../code/label_paths.py 
 python3 ../../code/graph_from_as_paths.py 
 python3 ../../code/heuristics_pinpointing.py
+python3 ../../code/path_format_BeCAUSe.py
+python3 ../../code/MCMC_network_tomography.py
+python3 ../../code/HMC_network_tomography.py
+python3 ../../code/create_summaries.py

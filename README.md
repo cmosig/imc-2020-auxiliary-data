@@ -105,3 +105,7 @@ Then run the script:
     python3 ../../code/heuristics_pinpointing.py
 
 This script pinpoints ASes based on the heuristic approach. 
+
+# Plots
+
+All plots from our paper are available in the /plots directory.
